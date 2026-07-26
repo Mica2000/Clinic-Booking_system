@@ -4,7 +4,8 @@ on:
   push:
     branches:
       - main
-      - feature/*
+      - "feature/**"
+
   pull_request:
     branches:
       - main
@@ -12,6 +13,10 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+
+    env:
+      APP_NAME: ${{ secrets.APP_NAME }}
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
     steps:
       - uses: actions/checkout@v4
@@ -25,6 +30,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Verify imports
+      - name: Verify application imports
         run: |
           python -c "from app.main import app; print('Application loaded successfully')"
