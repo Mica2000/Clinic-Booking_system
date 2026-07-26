@@ -38,3 +38,5 @@ class Patient(Base):
         DateTime,
         default=datetime.utcnow,
     )
+
+from app.models.appointment import Appointment

@@ -54,3 +54,5 @@ class Doctor(Base):
         Time,
         nullable=False,
     )
+
+from app.models.appointment import Appointment
