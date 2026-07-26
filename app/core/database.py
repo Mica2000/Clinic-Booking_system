@@ -1,12 +1,13 @@
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, declarative_base
+from sqlalchemy.orm import sessionmaker
 
 from app.core.config import settings
+from app.models.base import Base
 
 # Create the SQLAlchemy engine
 engine = create_engine(
     settings.database_url,
-    echo=True,
+    echo=settings.debug,
 )
 
 # Create a session factory
@@ -15,10 +16,6 @@ SessionLocal = sessionmaker(
     autoflush=False,
     bind=engine,
 )
-
-# Base class for all database models
-Base = declarative_base()
-
 
 def get_db():
     """
