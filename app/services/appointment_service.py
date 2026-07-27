@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models.appointment import Appointment
@@ -21,33 +22,32 @@ def create_appointment(
     if not patient:
         raise ValueError("Patient not found")
 
-    # Handle timezone-aware and naive datetimes
+    # Ignore seconds and microseconds
+    appointment_time = appointment_time.replace(
+        second=0,
+        microsecond=0,
+    )
+
     if appointment_time.tzinfo:
         now = datetime.now(timezone.utc)
     else:
         now = datetime.now()
 
-    # Cannot book in the past
     if appointment_time <= now:
-        raise ValueError("Appointments cannot be booked in the past.")
+        raise ValueError(
+            "Appointments cannot be booked in the past."
+        )
 
-    # Bonus requirement
     if appointment_time < now + timedelta(hours=1):
         raise ValueError(
             "Appointments must be booked at least 1 hour in advance."
         )
 
-    # Only allow 30-minute slots
-    if (
-        appointment_time.minute not in (0, 30)
-        or appointment_time.second != 0
-        or appointment_time.microsecond != 0
-    ):
+    if appointment_time.minute not in (0, 30):
         raise ValueError(
             "Appointments must start on a 30-minute boundary."
         )
 
-    # Check doctor's working hours
     appointment_time_only = appointment_time.time()
 
     if (
@@ -58,7 +58,6 @@ def create_appointment(
             "Appointment is outside the doctor's working hours."
         )
 
-    # Prevent double booking
     existing = (
         db.query(Appointment)
         .filter(
@@ -102,7 +101,9 @@ def cancel_appointment(
         raise ValueError("Appointment not found")
 
     if appointment.status == "cancelled":
-        raise ValueError("Appointment has already been cancelled.")
+        raise ValueError(
+            "Appointment has already been cancelled."
+        )
 
     appointment.status = "cancelled"
     appointment.cancellation_reason = reason
@@ -138,6 +139,12 @@ def reschedule_appointment(
         .first()
     )
 
+    # Ignore seconds and microseconds
+    new_time = new_time.replace(
+        second=0,
+        microsecond=0,
+    )
+
     if new_time.tzinfo:
         now = datetime.now(timezone.utc)
     else:
@@ -153,11 +160,7 @@ def reschedule_appointment(
             "Appointments must be booked at least 1 hour in advance."
         )
 
-    if (
-        new_time.minute not in (0, 30)
-        or new_time.second != 0
-        or new_time.microsecond != 0
-    ):
+    if new_time.minute not in (0, 30):
         raise ValueError(
             "Appointments must start on a 30-minute boundary."
         )
@@ -201,7 +204,7 @@ def reschedule_appointment(
 def get_available_slots(
     db: Session,
     doctor_id: int,
-    date,
+    appointment_date,
 ):
     doctor = (
         db.query(Doctor)
@@ -213,31 +216,34 @@ def get_available_slots(
         raise ValueError("Doctor not found")
 
     booked_slots = {
-        appointment.appointment_time.replace(
-            tzinfo=None
-        )
+        appointment.appointment_time.replace(tzinfo=None)
         for appointment in db.query(Appointment).filter(
             Appointment.doctor_id == doctor_id,
             Appointment.status == "scheduled",
+            func.date(Appointment.appointment_time) == appointment_date,
         )
     }
 
     slots = []
 
     current = datetime.combine(
-        date,
+        appointment_date,
         doctor.work_start_time,
     )
 
     end = datetime.combine(
-        date,
+        appointment_date,
         doctor.work_end_time,
     )
 
     while current < end:
         if current not in booked_slots:
-            slots.append(current)
+            slots.append(current.isoformat())
 
         current += timedelta(minutes=30)
 
-    return slots
+    return {
+        "doctor_id": doctor_id,
+        "date": appointment_date,
+        "available_slots": slots,
+    }
