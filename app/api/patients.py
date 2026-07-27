@@ -5,6 +5,9 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.models.patient import Patient
 from app.schemas.schemas import PatientCreate, PatientResponse
+from app.models.appointment import Appointment
+
+from datetime import datetime
 
 router = APIRouter(prefix="/patients", tags=["Patients"])
 
@@ -43,3 +46,33 @@ def get_patient(
         )
 
     return patient
+
+@router.get("/{patient_id}/appointments")
+def get_patient_appointments(
+    patient_id: int,
+    db: Session = Depends(get_db),
+):
+    patient = (
+        db.query(Patient)
+        .filter(Patient.id == patient_id)
+        .first()
+    )
+
+    if not patient:
+        raise HTTPException(
+            status_code=404,
+            detail="Patient not found",
+        )
+
+    appointments = (
+        db.query(Appointment)
+        .filter(
+            Appointment.patient_id == patient_id,
+            Appointment.status == "scheduled",
+            Appointment.appointment_time >= datetime.now(),
+        )
+        .order_by(Appointment.appointment_time)
+        .all()
+    )
+
+    return appointments

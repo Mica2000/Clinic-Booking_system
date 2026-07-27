@@ -2,21 +2,21 @@
 
 A RESTful Clinic Booking System built with **FastAPI**, **SQLAlchemy**, **PostgreSQL**, and **Alembic**.
 
-The application enables clinic staff to manage doctors, patients, and appointments while enforcing scheduling rules that prevent double-booking and support appointment cancellation and rescheduling.
+The system enables clinic staff to manage doctors, patients, and appointments while enforcing scheduling rules such as doctor working hours, 30-minute appointment slots, double-booking prevention, appointment cancellation, and rescheduling.
 
 ---
 
-# Live Demo
+# Live Application
 
-## API
+### API Base URL
 
 https://clinic-booking-system-3z3x.onrender.com/
 
-## Swagger UI
+### Swagger UI
 
 https://clinic-booking-system-3z3x.onrender.com/docs
 
-## ReDoc
+### ReDoc
 
 https://clinic-booking-system-3z3x.onrender.com/redoc
 
@@ -24,18 +24,23 @@ https://clinic-booking-system-3z3x.onrender.com/redoc
 
 # Features
 
-- Manage doctors
-- Manage patients
+- Create and manage doctors
+- Create and manage patients
 - Book appointments
-- Cancel appointments
+- Cancel appointments with a mandatory reason
 - Reschedule appointments
-- Check doctor availability
+- View doctor availability
+- View upcoming patient appointments
 - Prevent double-booking
+- Enforce doctor working hours
+- Enforce 30-minute appointment slots
+- Prevent appointments in the past
+- Prevent bookings within one hour of the current time
 - PostgreSQL database
 - Alembic database migrations
 - Interactive API documentation
+- CI/CD using GitHub Actions
 - Cloud deployment on Render
-- GitHub Actions CI pipeline
 
 ---
 
@@ -53,13 +58,134 @@ https://clinic-booking-system-3z3x.onrender.com/redoc
 
 ---
 
+# System Design
+
+## Database Models
+
+### Doctor
+
+| Field           |
+| --------------- |
+| id              |
+| first_name      |
+| last_name       |
+| email           |
+| phone_number    |
+| specialization  |
+| work_start_time |
+| work_end_time   |
+| is_active       |
+| created_at      |
+
+### Patient
+
+| Field        |
+| ------------ |
+| id           |
+| first_name   |
+| last_name    |
+| email        |
+| phone_number |
+| created_at   |
+
+### Appointment
+
+| Field               |
+| ------------------- |
+| id                  |
+| doctor_id           |
+| patient_id          |
+| appointment_time    |
+| status              |
+| cancellation_reason |
+
+Relationships
+
+- One Doctor → Many Appointments
+- One Patient → Many Appointments
+
+---
+
+# Appointment Scheduling Strategy
+
+Appointments are dynamically validated instead of pre-generating appointment slots.
+
+Whenever a booking request is received, the system verifies:
+
+- the doctor exists
+- the patient exists
+- the appointment is not in the past
+- the appointment is at least one hour ahead of the current time
+- the appointment begins on a 30-minute interval
+- the appointment falls within the doctor's working hours
+- the requested slot has not already been booked
+
+Doctor availability is calculated dynamically by generating every 30-minute slot within the doctor's working hours for a selected date and removing any booked appointments.
+
+---
+
+# Architectural Decisions
+
+### Modular Architecture
+
+The project separates responsibilities into:
+
+- API routes
+- Database models
+- Schemas
+- Business services
+- Database configuration
+
+This keeps business logic separate from HTTP endpoints and improves maintainability.
+
+### Service Layer
+
+Appointment validation is handled inside the service layer rather than inside API routes, making the code easier to test and reuse.
+
+### SQL Database
+
+PostgreSQL was selected because appointment scheduling requires:
+
+- relational data
+- transactions
+- constraints
+- reliable querying
+- future scalability
+
+---
+
+# Engineering Trade-offs
+
+## SQL vs NoSQL
+
+PostgreSQL was chosen because appointments have strong relationships between doctors and patients, and transactional consistency is important for preventing double-booking.
+
+## Dynamic Availability vs Stored Slots
+
+Instead of storing every possible appointment slot, available slots are generated dynamically.
+
+Advantages:
+
+- less storage
+- no synchronization issues
+- reflects doctor working hours automatically
+
+Trade-off:
+
+- slightly more computation during availability requests
+
+---
+
 # Project Structure
 
 ```text
 clinic-booking-system/
+
+├── .github/
+│   └── workflows/
+│       └── ci.yml
 │
 ├── alembic/
-│   └── versions/
 │
 ├── app/
 │   ├── api/
@@ -67,172 +193,38 @@ clinic-booking-system/
 │   ├── models/
 │   ├── schemas/
 │   ├── services/
-│   ├── repositories/
 │   └── main.py
 │
 ├── tests/
-│
-├── .github/
-│   └── workflows/
-│       └── ci.yml
-│
 ├── requirements.txt
-├── alembic.ini
 ├── README.md
-└── REFLECTION.md
+├── REFLECTION.md
+└── alembic.ini
 ```
 
 ---
 
-# System Design
+# Installation
 
-The system follows a layered architecture that separates API endpoints, business logic, database models, and data validation.
-
-The architecture is organized into:
-
-- API Layer – Handles HTTP requests and responses.
-- Service Layer – Implements appointment booking and scheduling rules.
-- Database Layer – SQLAlchemy ORM models for persistence.
-- Schema Layer – Pydantic models for validation and serialization.
-
-This separation improves maintainability, readability, and future scalability.
-
----
-
-# Database Models
-
-## Doctor
-
-Stores doctor information including:
-
-- Name
-- Email
-- Phone number
-- Specialization
-- Working hours
-- Active status
-
----
-
-## Patient
-
-Stores patient information including:
-
-- Name
-- Email
-- Phone number
-- Date of birth
-
----
-
-## Appointment
-
-Stores appointment details including:
-
-- Doctor
-- Patient
-- Appointment date
-- Appointment time
-- Status
-- Cancellation reason
-- Creation timestamp
-
-Appointments are linked to both doctors and patients through foreign key relationships.
-
----
-
-# Appointment Scheduling Strategy
-
-Appointments are scheduled in **30-minute intervals**.
-
-During booking, the application validates:
-
-- Appointment is within the doctor's working hours.
-- Appointment is not in the past.
-- Doctor is available.
-- Requested slot has not already been booked.
-
-Doctor availability is calculated dynamically based on:
-
-- Doctor working hours
-- Existing appointments
-- Appointment duration (30 minutes)
-
-This approach avoids storing thousands of unused time slots inside the database.
-
----
-
-# Architectural Decisions
-
-## Why PostgreSQL?
-
-PostgreSQL was selected because it offers:
-
-- Strong ACID compliance
-- Reliable transactional integrity
-- Excellent support for relational data
-- Mature SQLAlchemy integration
-
-Healthcare scheduling requires consistency, making PostgreSQL a suitable choice.
-
----
-
-## Why Dynamic Availability?
-
-Instead of pre-generating appointment slots, availability is calculated dynamically.
-
-Advantages include:
-
-- Less storage
-- Easier schedule updates
-- No synchronization problems
-- Better scalability
-
----
-
-## Layered Project Structure
-
-Business logic is separated from API endpoints.
-
-Benefits include:
-
-- Easier testing
-- Better code organization
-- Higher maintainability
-- Cleaner separation of responsibilities
-
----
-
-# Engineering Trade-offs
-
-| Decision      | Selected            | Alternative           | Reason                                         |
-| ------------- | ------------------- | --------------------- | ---------------------------------------------- |
-| Database      | PostgreSQL          | MongoDB               | Strong relational integrity                    |
-| Scheduling    | Dynamic calculation | Pre-generated slots   | More flexible and less storage                 |
-| ORM           | SQLAlchemy          | Raw SQL               | Cleaner and easier maintenance                 |
-| API Framework | FastAPI             | Django REST Framework | Automatic validation and OpenAPI documentation |
-
----
-
-# Getting Started
-
-## Clone Repository
+Clone the repository.
 
 ```bash
 git clone https://github.com/Mica2000/Clinic-Booking_system.git
 ```
 
+Move into the project.
+
 ```bash
 cd Clinic-Booking_system
 ```
 
----
-
-## Create Virtual Environment
+Create a virtual environment.
 
 ```bash
 python -m venv .venv
 ```
+
+Activate it.
 
 Windows
 
@@ -246,9 +238,7 @@ Linux/macOS
 source .venv/bin/activate
 ```
 
----
-
-## Install Dependencies
+Install dependencies.
 
 ```bash
 pip install -r requirements.txt
@@ -262,15 +252,14 @@ Create a `.env` file.
 
 ```env
 APP_NAME=Clinic Booking System
-
-DATABASE_URL=postgresql://username:password@localhost:5432/clinic_booking_db
+DATABASE_URL=postgresql://username:password@host/database
 ```
 
 ---
 
-# Database Setup
+# Database Migration
 
-Run database migrations.
+Run all migrations.
 
 ```bash
 alembic upgrade head
@@ -282,12 +271,6 @@ alembic upgrade head
 
 ```bash
 uvicorn app.main:app --reload
-```
-
-The application will be available at
-
-```
-http://127.0.0.1:8000
 ```
 
 ---
@@ -312,60 +295,57 @@ http://127.0.0.1:8000/redoc
 
 ## Doctors
 
-| Method | Endpoint                     | Description          |
-| ------ | ---------------------------- | -------------------- |
-| POST   | `/doctors/`                  | Create doctor        |
-| GET    | `/doctors/`                  | List doctors         |
-| GET    | `/doctors/{id}`              | Get doctor           |
-| GET    | `/doctors/{id}/availability` | View available slots |
+| Method | Endpoint                                            | Description                    |
+| ------ | --------------------------------------------------- | ------------------------------ |
+| POST   | `/doctors/`                                         | Create doctor                  |
+| GET    | `/doctors/`                                         | List doctors                   |
+| GET    | `/doctors/{doctor_id}`                              | Get doctor                     |
+| GET    | `/doctors/{doctor_id}/availability?date=YYYY-MM-DD` | View available 30-minute slots |
 
 ---
 
 ## Patients
 
-| Method | Endpoint         | Description    |
-| ------ | ---------------- | -------------- |
-| POST   | `/patients/`     | Create patient |
-| GET    | `/patients/`     | List patients  |
-| GET    | `/patients/{id}` | Get patient    |
+| Method | Endpoint                              | Description                |
+| ------ | ------------------------------------- | -------------------------- |
+| POST   | `/patients/`                          | Create patient             |
+| GET    | `/patients/`                          | List patients              |
+| GET    | `/patients/{patient_id}`              | Get patient                |
+| GET    | `/patients/{patient_id}/appointments` | View upcoming appointments |
 
 ---
 
 ## Appointments
 
-| Method | Endpoint                        | Description            |
-| ------ | ------------------------------- | ---------------------- |
-| POST   | `/appointments/`                | Book appointment       |
-| PATCH  | `/appointments/{id}/cancel`     | Cancel appointment     |
-| PATCH  | `/appointments/{id}/reschedule` | Reschedule appointment |
+| Method | Endpoint                                    | Description            |
+| ------ | ------------------------------------------- | ---------------------- |
+| POST   | `/appointments/`                            | Book appointment       |
+| PATCH  | `/appointments/{appointment_id}/cancel`     | Cancel appointment     |
+| PATCH  | `/appointments/{appointment_id}/reschedule` | Reschedule appointment |
 
 ---
 
 # Business Rules
 
-The application enforces the following rules:
+The system enforces the following rules:
 
 - Doctors cannot be double-booked.
+- Appointments must occur during a doctor's configured working hours.
+- Appointments must start on 30-minute intervals.
 - Appointments cannot be scheduled in the past.
-- Appointments must fall within doctor working hours.
-- Cancelled appointments cannot be cancelled again.
-- Rescheduling validates the new appointment before releasing the old slot.
-- Cancelled appointments free their booked time slot.
-- Appropriate HTTP status codes and descriptive error messages are returned for validation failures.
+- New appointments must be booked at least one hour in advance.
+- Cancelled appointments cannot be cancelled twice.
+- Cancelled appointments cannot be rescheduled.
+- Doctor availability returns all free 30-minute appointment blocks for a selected date.
+- Upcoming patient appointments are returned in chronological order.
 
 ---
 
 # Testing
 
-The project includes automated tests covering core appointment booking validation.
+The repository includes automated tests covering the appointment booking logic.
 
-Tests focus on:
-
-- Double-booking prevention
-- Working hour validation
-- Appointment scheduling rules
-
-Run the tests using:
+Tests can be executed using:
 
 ```bash
 pytest
@@ -373,33 +353,13 @@ pytest
 
 ---
 
-# Deployment
-
-The application is deployed on **Render** using a **Neon PostgreSQL** database.
-
-## Live URL
-
-https://clinic-booking-system-3z3x.onrender.com/
-
----
-
 # CI/CD
 
-The project includes a GitHub Actions workflow located at:
+GitHub Actions automatically runs the project's test suite whenever changes are pushed or a Pull Request is opened.
 
-```
-.github/workflows/ci.yml
-```
+The production application is deployed on **Render**.
 
-The workflow automatically:
-
-- Checks out the repository
-- Sets up Python
-- Installs dependencies
-- Runs the test suite
-- Verifies the application builds successfully
-
-Render is configured to automatically deploy the latest version whenever changes are merged into the production branch.
+Deployment is triggered from the **main** branch after successful integration.
 
 ---
 

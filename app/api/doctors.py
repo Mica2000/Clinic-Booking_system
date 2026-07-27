@@ -5,6 +5,10 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.models.doctor import Doctor
 from app.schemas.schemas import DoctorCreate, DoctorResponse
+from app.services.appointment_service import get_available_slots
+
+from datetime import date
+
 
 
 router = APIRouter(prefix="/doctors", tags=["Doctors"])
@@ -44,3 +48,27 @@ def get_doctor(
         )
 
     return doctor
+
+@router.get("/{doctor_id}/availability")
+def doctor_availability(
+    doctor_id: int,
+    date: date,
+    db: Session = Depends(get_db),
+):
+    doctor = (
+        db.query(Doctor)
+        .filter(Doctor.id == doctor_id)
+        .first()
+    )
+
+    if not doctor:
+        raise HTTPException(
+            status_code=404,
+            detail="Doctor not found",
+        )
+
+    return get_available_slots(
+        db=db,
+        doctor_id=doctor_id,
+        appointment_date=date,
+    )
