@@ -70,5 +70,5 @@ def doctor_availability(
     return get_available_slots(
         db=db,
         doctor_id=doctor_id,
-        appointment_date=date,
+        date=date,
     )
