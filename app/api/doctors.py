@@ -52,7 +52,7 @@ def get_doctor(
 @router.get("/{doctor_id}/availability")
 def doctor_availability(
     doctor_id: int,
-    date: date,
+    appointment_date: date,
     db: Session = Depends(get_db),
 ):
     doctor = (
@@ -70,5 +70,5 @@ def doctor_availability(
     return get_available_slots(
         db=db,
         doctor_id=doctor_id,
-        date=date,
+        appointment_date=appointment_date,
     )

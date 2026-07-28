@@ -14,6 +14,9 @@ from app.services.appointment_service import (
     get_available_slots,
 )
 
+from datetime import date
+
+
 router = APIRouter(
     prefix="/appointments",
     tags=["Appointments"],
@@ -71,6 +74,11 @@ def reschedule(
 @router.get("/doctor/{doctor_id}")
 def doctor_schedule(
     doctor_id: int,
+    appointment_date: date,
     db: Session = Depends(get_db),
 ):
-    return get_available_slots(db, doctor_id)
+    return get_available_slots(
+        db=db,
+        doctor_id=doctor_id,
+        appointment_date=appointment_date,
+    )
