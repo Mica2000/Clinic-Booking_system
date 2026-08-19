@@ -215,17 +215,35 @@ def get_available_slots(
     if not doctor:
         raise ValueError("Doctor not found")
 
-    booked_slots = {
-        appointment.appointment_time.replace(tzinfo=None)
-        for appointment in db.query(Appointment).filter(
+    # Get all scheduled appointments for this doctor
+    appointments = (
+        db.query(Appointment)
+        .filter(
             Appointment.doctor_id == doctor_id,
             Appointment.status == "scheduled",
-            func.date(Appointment.appointment_time) == appointment_date,
         )
-    }
+        .all()
+    )
 
-    slots = []
+    # Store booked appointment times for the requested date
+    booked_slots = set()
 
+    for appointment in appointments:
+        appointment_time = appointment.appointment_time
+
+        # Remove timezone information so comparisons are consistent
+        if appointment_time.tzinfo is not None:
+            appointment_time = appointment_time.replace(tzinfo=None)
+
+        if appointment_time.date() == appointment_date:
+            booked_slots.add(
+                appointment_time.replace(
+                    second=0,
+                    microsecond=0,
+                )
+            )
+
+    # Generate all 30-minute slots within doctor's working hours
     current = datetime.combine(
         appointment_date,
         doctor.work_start_time,
@@ -236,14 +254,16 @@ def get_available_slots(
         doctor.work_end_time,
     )
 
+    available_slots = []
+
     while current < end:
         if current not in booked_slots:
-            slots.append(current.isoformat())
+            available_slots.append(current.isoformat())
 
         current += timedelta(minutes=30)
 
     return {
         "doctor_id": doctor_id,
         "date": appointment_date,
-        "available_slots": slots,
+        "available_slots": available_slots,
     }
