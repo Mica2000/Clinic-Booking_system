@@ -8,30 +8,47 @@ from app.models.doctor import Doctor
 from app.models.patient import Patient
 
 
+def normalize_datetime(value: datetime) -> datetime:
+    """
+    Normalize an incoming datetime to a naive datetime.
+
+    Seconds and microseconds are removed because the system
+    schedules appointments in 30-minute slots.
+    """
+    if value.tzinfo is not None:
+        value = value.astimezone(timezone.utc).replace(tzinfo=None)
+
+    return value.replace(second=0, microsecond=0)
+
+
 def create_appointment(
     db: Session,
     doctor_id: int,
     patient_id: int,
-    appointment_time,
+    appointment_time: datetime,
 ):
-    doctor = db.query(Doctor).filter(Doctor.id == doctor_id).first()
+    doctor = (
+        db.query(Doctor)
+        .filter(Doctor.id == doctor_id)
+        .first()
+    )
+
     if not doctor:
         raise ValueError("Doctor not found")
 
-    patient = db.query(Patient).filter(Patient.id == patient_id).first()
+    patient = (
+        db.query(Patient)
+        .filter(Patient.id == patient_id)
+        .first()
+    )
+
     if not patient:
         raise ValueError("Patient not found")
 
-    # Ignore seconds and microseconds
-    appointment_time = appointment_time.replace(
-        second=0,
-        microsecond=0,
-    )
+    # Normalize the incoming datetime before validation/storage.
+    appointment_time = normalize_datetime(appointment_time)
 
-    if appointment_time.tzinfo:
-        now = datetime.now(timezone.utc)
-    else:
-        now = datetime.now()
+    now = datetime.utcnow()
 
     if appointment_time <= now:
         raise ValueError(
@@ -117,7 +134,7 @@ def cancel_appointment(
 def reschedule_appointment(
     db: Session,
     appointment_id: int,
-    new_time,
+    new_time: datetime,
 ):
     appointment = (
         db.query(Appointment)
@@ -139,16 +156,13 @@ def reschedule_appointment(
         .first()
     )
 
-    # Ignore seconds and microseconds
-    new_time = new_time.replace(
-        second=0,
-        microsecond=0,
-    )
+    if not doctor:
+        raise ValueError("Doctor not found")
 
-    if new_time.tzinfo:
-        now = datetime.now(timezone.utc)
-    else:
-        now = datetime.now()
+    # Normalize the new appointment time.
+    new_time = normalize_datetime(new_time)
+
+    now = datetime.utcnow()
 
     if new_time <= now:
         raise ValueError(
@@ -215,35 +229,26 @@ def get_available_slots(
     if not doctor:
         raise ValueError("Doctor not found")
 
-    # Get all scheduled appointments for this doctor
+    # Get all scheduled appointments for this doctor on this date.
     appointments = (
         db.query(Appointment)
         .filter(
             Appointment.doctor_id == doctor_id,
             Appointment.status == "scheduled",
+            func.date(Appointment.appointment_time)
+            == appointment_date,
         )
         .all()
     )
 
-    # Store booked appointment times for the requested date
-    booked_slots = set()
+    # Convert booked times to naive datetimes for comparison.
+    booked_slots = {
+        normalize_datetime(appointment.appointment_time)
+        for appointment in appointments
+    }
 
-    for appointment in appointments:
-        appointment_time = appointment.appointment_time
+    slots = []
 
-        # Remove timezone information so comparisons are consistent
-        if appointment_time.tzinfo is not None:
-            appointment_time = appointment_time.replace(tzinfo=None)
-
-        if appointment_time.date() == appointment_date:
-            booked_slots.add(
-                appointment_time.replace(
-                    second=0,
-                    microsecond=0,
-                )
-            )
-
-    # Generate all 30-minute slots within doctor's working hours
     current = datetime.combine(
         appointment_date,
         doctor.work_start_time,
@@ -254,16 +259,15 @@ def get_available_slots(
         doctor.work_end_time,
     )
 
-    available_slots = []
-
     while current < end:
+
         if current not in booked_slots:
-            available_slots.append(current.isoformat())
+            slots.append(current.isoformat())
 
         current += timedelta(minutes=30)
 
     return {
         "doctor_id": doctor_id,
         "date": appointment_date,
-        "available_slots": available_slots,
+        "available_slots": slots,
     }
